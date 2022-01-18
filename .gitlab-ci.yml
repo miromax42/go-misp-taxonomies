@@ -1,0 +1,44 @@
+stages: # List of stages for jobs, and their order of execution
+  - build
+  - deploy
+
+build-job: # This job runs in the build stage, which runs first.
+  stage: build
+  tags:
+    - datahook
+  script:
+    - echo "Building Dockerfile..."
+    - docker pull $CI_REGISTRY_IMAGE:latest || true
+    - docker build --cache-from $CI_REGISTRY_IMAGE:latest -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA -t $CI_REGISTRY_IMAGE:latest .  --build-arg GITLAB_USER=${CI_REGISTRY_USER} --build-arg GITLAB_TOKEN=${CI_JOB_TOKEN}
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker push $CI_REGISTRY_IMAGE:latest
+    - echo "Building complete."
+  only:
+    refs:
+      - main
+    changes:
+      - cmd/**/*
+      - internal/**/*
+      - Dockerfile
+      - .gitlab-ci.yml
+      - go.mod
+      - go.sum
+
+deploy-job:
+  stage: deploy
+  tags:
+    - datahook
+  script:
+    - docker-compose -f /opt/zaslon/webhook-services/docker-compose.yml up -d
+  only:
+    refs:
+      - main
+    changes:
+      - cmd/**/*
+      - internal/**/*
+      - Dockerfile
+      - .gitlab-ci.yml
+      - go.mod
+      - go.sum
+  needs:
+    - build-job
